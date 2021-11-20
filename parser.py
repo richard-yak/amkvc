@@ -2,14 +2,39 @@ import csv
 import sys
 import os
 import time
+from copy import copy
 from datetime import datetime
 from functools import reduce
+
+from openpyxl.styles import PatternFill, Alignment, Font
+from openpyxl.utils import get_column_letter
 
 import openpyxl
 from openpyxl import Workbook
 import pandas as pd
 
 csv.field_size_limit(sys.maxsize)
+
+
+def formatWS(ws):
+    for rows in ws.iter_rows(min_row=1, max_row=1, min_col=1):
+        for cell in rows:
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="8EA9DB", end_color='8EA9DB', fill_type="solid")
+
+    dims = {}
+    for row in ws.rows:
+        for cell in row:
+            cell.alignment = Alignment(wrapText=True)
+            alignment_obj = copy(cell.alignment)
+            alignment_obj.horizontal = 'center'
+            alignment_obj.vertical = 'center'
+            cell.alignment = alignment_obj
+
+            if cell.value:
+                dims[cell.column_letter] = max((dims.get(cell.column_letter, 0), len(str(cell.value))))
+    for col, value in dims.items():
+        ws.column_dimensions[col].width = value
 
 
 def loadData():
@@ -39,7 +64,7 @@ def cleanNum(num):
 
 
 def stackString(strList):
-    strList = map(lambda x: x.strftime('%d/%m/%Y, %H:%M:%S') if isinstance(x, datetime) else str(x), strList)
+    strList = map(lambda x: x.strftime('%d/%m/%Y') if isinstance(x, datetime) else str(x), strList)
     return "\n".join(strList)
 
 
@@ -56,7 +81,6 @@ def genVolunteerSheet(wb, dataDict):
     ws.append(header)
 
     for key in dataDict:
-        rowData = []
         dataArray = dataDict.get(key)
         ssaNames = []
         centreNames = []
@@ -74,17 +98,15 @@ def genVolunteerSheet(wb, dataDict):
             number = dataset[7]
             grpName = dataset[8]
             status = ''
-            numVolunteer = dataset[9]
-            ssaNames.append(dataset[2])
-            centreNames.append(dataset[3])
-            programNames.append(dataset[4])
-
             if dataset[2] not in ssaNames:
                 ssaNum += 1
             if dataset[4] not in programNames:
                 # roles seems to be how many unique program entries
                 roles += 1
-
+            numVolunteer = dataset[9]
+            ssaNames.append(dataset[2])
+            centreNames.append(dataset[3])
+            programNames.append(dataset[4])
             eventDates.append(dataset[10])
             eventTime.append(dataset[12])
             hoursPerSess.append(dataset[13])
@@ -92,23 +114,48 @@ def genVolunteerSheet(wb, dataDict):
             remarks.append(dataset[17])
 
         sessions = len(programNames)
-        # THERE IS ERROR IN EXCEL, DOUBLE CHECK!!
         totalHoursVolunteer = reduce(lambda a, b: cleanNum(a) + cleanNum(b), hoursPerSess)
         entryData = [indGrp, number, grpName, status, numVolunteer, stackString(ssaNames), stackString(centreNames),
-                     stackString(programNames), roles, stackString(eventDates), sessions, stackString(eventTime),
-                     stackString(hoursPerSess), totalHoursVolunteer, didVolunteerPlan, stackString(remarks)]
-
-        print (entryData)
+                     ssaNum, stackString(programNames), roles, stackString(eventDates), sessions,
+                     stackString(eventTime),
+                     stackString(hoursPerSess), totalHoursVolunteer, stackString(didVolunteerPlan),
+                     stackString(remarks)]
+        ws.append(entryData)
+    formatWS(ws)
     return wb
 
 
 def genProgramSheet(wb, dataDict):
+    sheetName = '(G) Programme Details'
+    header = ['S/N', 'Programme', 'Partners Involved', 'Programme Details (Date and Time)',
+              'Number of Beneficiaries/Service Users', 'Number of Volunteers', '', '', 'Number of Volunteering Hours']
+
+    subHeader = ['', '', '', '', '', 'Adhoc', 'Regular', 'Leader', '']
+
+    ws = wb.create_sheet(sheetName)
+    ws.title = sheetName
+    ws.append(header)
+    ws.append(subHeader)
+    # header loop
+    # there must be a smarter way to do this but... i don't know
+    ws.merge_cells('A1:A2')
+    ws.merge_cells('B1:B2')
+    ws.merge_cells('C1:C2')
+    ws.merge_cells('D1:D2')
+    ws.merge_cells('A1:A2')
+    ws.merge_cells('E1:E2')
+    ws.merge_cells('F1:H1')
+    ws.merge_cells('I1:I2')
+
+    print(dataDict)
+
     return wb
 
 
 def parseExcel(filename):
     # I should be able to generate 4 additional sheets after being provided one sheet
     workbook = openpyxl.load_workbook(filename)
+    outbook = Workbook()
     ws = workbook.worksheets[0]
     # index ref
     # [0] (Internal/External),[1] (AMK/SK/PG/Others),[2] (Name of SSA),[3] (Centre Name),
@@ -132,10 +179,11 @@ def parseExcel(filename):
         programName = stripdown(dataArray[4])
         programDict.setdefault(programName, []).append(dataArray)
 
-    workbook = genVolunteerSheet(workbook, volunteerDict)
-    workbook = genProgramSheet(workbook, programDict)
+    outbook = genVolunteerSheet(outbook, volunteerDict)
+    workbook = genProgramSheet(outbook, programDict)
+    del outbook['Sheet']
 
-
+    outbook.save('output-data.xlsx')
     workbook.close()
 
 
