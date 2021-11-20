@@ -40,9 +40,10 @@ def formatWS(ws):
 def loadData():
     directory = os.fsencode(os.getcwd() + '/data')
     for subdir in os.listdir(directory):
-        filename = os.path.join(directory, subdir).decode()
-        if filename.endswith(".xlsx"):
-            parseExcel(filename)
+        if not subdir.decode().startswith('~'):
+            filename = os.path.join(directory, subdir).decode()
+            if filename.endswith(".xlsx"):
+                parseExcel(filename)
 
 
 # aux function to compare 2 strings without spaces and casing
@@ -64,8 +65,12 @@ def cleanNum(num):
 
 
 def stackString(strList):
-    strList = map(lambda x: x.strftime('%d/%m/%Y') if isinstance(x, datetime) else str(x), strList)
+    strList = cleanList(strList)
     return "\n".join(strList)
+
+
+def cleanList(strList):
+    return list(map(lambda x: x.strftime('%d/%m/%Y') if isinstance(x, datetime) else str(x), strList))
 
 
 def genVolunteerSheet(wb, dataDict):
@@ -147,7 +152,43 @@ def genProgramSheet(wb, dataDict):
     ws.merge_cells('F1:H1')
     ws.merge_cells('I1:I2')
 
-    print(dataDict)
+    # proceed official data dissection here
+    counter = 1
+    for key in dataDict:
+        dataArray = dataDict.get(key)
+        progDates = []
+        progTimes = []
+        serviceUsers = 0
+        adhocCount = 0
+        regularCount = 0
+        leaderCount = 0
+        for i in range(len(dataArray)):
+            dataset = dataArray[i]
+            progName = dataset[4]
+            partnerName = dataset[2] + " & " + dataset[8]
+
+            progDates.append(dataset[10])
+            progTimes.append(dataset[12])
+            serviceUsers += dataset[15]
+            hoursPerSess = dataset[13]
+            volunteernum = dataset[9]
+
+        totalHoursVolunteer = hoursPerSess * len(dataArray) * volunteernum
+        progDates = cleanList(progDates)
+
+        progDatetime = []
+        for j in range(len(progDates)):
+            progDate = progDates[j]
+            progTime = progTimes[j]
+            datetimeConcat = progDate + ', ' + progTime
+            progDatetime.append(datetimeConcat)
+
+        dataEntry = [counter, progName, partnerName, stackString(progDatetime), serviceUsers, adhocCount,
+                     regularCount, leaderCount, totalHoursVolunteer]
+
+        ws.append(dataEntry)
+        counter += 1
+    formatWS(ws)
 
     return wb
 
@@ -180,11 +221,12 @@ def parseExcel(filename):
         programDict.setdefault(programName, []).append(dataArray)
 
     outbook = genVolunteerSheet(outbook, volunteerDict)
-    workbook = genProgramSheet(outbook, programDict)
+    outbook = genProgramSheet(outbook, programDict)
     del outbook['Sheet']
 
     outbook.save('output-data.xlsx')
     workbook.close()
+    outbook.close()
 
 
 loadData()
