@@ -158,6 +158,7 @@ def genProgramSheet(wb, dataDict):
         dataArray = dataDict.get(key)
         progDates = []
         progTimes = []
+        centres = []
         serviceUsers = 0
         adhocCount = 0
         regularCount = 0
@@ -166,12 +167,18 @@ def genProgramSheet(wb, dataDict):
             dataset = dataArray[i]
             progName = dataset[4]
             partnerName = dataset[2] + " & " + dataset[8]
-
+            if dataset[3] not in centres:
+                centres.append(dataset[3])
+                serviceUsers += dataset[15]
             progDates.append(dataset[10])
             progTimes.append(dataset[12])
-            serviceUsers += dataset[15]
             hoursPerSess = dataset[13]
             volunteernum = dataset[9]
+
+        if len(progDates) <= 1:
+            adhocCount += volunteernum
+        else:
+            regularCount += volunteernum
 
         totalHoursVolunteer = hoursPerSess * len(dataArray) * volunteernum
         progDates = cleanList(progDates)
