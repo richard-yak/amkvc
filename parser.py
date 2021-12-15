@@ -3,7 +3,7 @@ import sys
 import os
 import time
 from copy import copy
-from datetime import datetime
+from datetime import datetime, date
 from functools import reduce
 
 from openpyxl.styles import PatternFill, Alignment, Font
@@ -75,6 +75,29 @@ def stackString(strList):
 
 def cleanList(strList):
     return list(map(lambda x: x.strftime('%d/%m/%Y') if isinstance(x, datetime) else str(x), strList))
+
+
+def diff_month(d1, d2):
+    return (d1.year - d2.year) * 12 + d1.month - d2.month
+
+
+def formatDateRangeToString(dateRange):
+    dateDict = {}
+    for i in range(len(dateRange)):
+        monthYearKey = dateRange[i].strftime('%b-%Y')
+        dateDict.setdefault(monthYearKey, []).append(dateRange[i])
+
+    finalString = []
+    # after sorting them to dicts, go over dict and form string
+    for key in dateDict:
+        dates = dateDict.get(key)
+        dates = sorted(dates)
+        # reduce all of the keys
+        dayStr = reduce(lambda x, y: x + ',' + y, map(lambda x: x.strftime('%d'), dates))
+        finalString.append(dayStr + ' ' + str.replace(key, '-', ' '))
+    return "\n".join(finalString)
+
+
 
 
 def genVolunteerSheet(wb, dataDict):
@@ -247,8 +270,44 @@ def genPartnerSheet(wb, partnerDict, SSADict):
     formatWS(ws)
     return wb
 
-def genPartnerDetailsSheet(wb, detailsDict):
 
+def genPartnerDetailsSheet(wb, detailsDict):
+    sheetName = '(F) Partnership Details'
+    header = ['S/N', 'Name of Organisation/Sector', 'Number of Volunteers Deployed to Organisation/Sector',
+              'Date of Deployment of Volunteers to Organisation/Sector',
+              'Number of Volunteers Active/Volunteering After 6 Months']
+
+    ws = wb.create_sheet(sheetName)
+    ws.title = sheetName
+    ws.append(header)
+
+    counter = 1
+    keyGroup = []
+    for key in detailsDict:
+        dataArray = detailsDict.get(key)
+        namedKey = ''
+        volunteerCount = 0
+        dateRanges = []
+        for i in range(len(dataArray)):
+            dataset = dataArray[i]
+            namedKey = dataset[2] + " (" + dataset[8] + ")"
+            dateRanges.append(dataset[10])
+            if namedKey not in keyGroup:
+                keyGroup.append(namedKey)
+                volunteerCount += int(dataset[9])
+
+        # okay at this point they are all in datetime format, so i can immediately execute readings on them
+        minDate = min(dateRanges)
+        maxDate = max(dateRanges)
+        diff = diff_month(maxDate, minDate)
+        dateStr = formatDateRangeToString(dateRanges)
+        continuousMonth = 'NA'
+        if diff >= 6:
+            continuousMonth = 'YES'
+        counter += 1
+        dataEntry = [counter, namedKey, volunteerCount, dateStr, continuousMonth]
+        ws.append(dataEntry)
+    formatWS(ws)
     return wb
 
 
@@ -281,11 +340,13 @@ def parseExcel(filename):
         volunteerDict.setdefault(groupName, []).append(dataArray)
         programName = stripdown(dataArray[4])
         programDict.setdefault(programName, []).append(dataArray)
-        #use column G as unique identifier
+        # use column G as unique identifier
         partnerType = stripdown(dataArray[6])
         if partnerType != 'individual':
             partnerDict.setdefault(removeSuffixesFromGroup(dataArray[8]), []).append(dataArray)
-            detailsDict.setdefault(groupName, []).append(dataArray)
+            # for this dict, need to set apart using column C + Column I
+            detailsKey = stripdown(dataArray[2]) + "-" + groupName
+            detailsDict.setdefault(detailsKey, []).append(dataArray)
         SSADict.setdefault(dataArray[2], []).append(dataArray)
 
 
