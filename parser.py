@@ -55,6 +55,10 @@ def stripdown(str1):
     return "".join(str1.split()).lower()
 
 
+def removeSuffixesFromGroup(str1):
+    return str.strip(str1).split("-")[0]
+
+
 def cleanNum(num):
     try:
         return float(num)
@@ -199,6 +203,54 @@ def genProgramSheet(wb, dataDict):
 
     return wb
 
+def genPartnerSheet(wb, partnerDict, SSADict):
+    sheetName = '(E) Partners and SSAs'
+    header = ['S/N', 'Name of Organisation', 'Type of Partner', 'Number of Volunteers']
+
+    ws = wb.create_sheet(sheetName)
+    ws.title = sheetName
+    ws.append(header)
+
+    counter = 1
+    groups = []
+
+    for key in partnerDict:
+        dataArray = partnerDict.get(key)
+        volunteerCount = 0
+        typeOfPartner = ''
+        for i in range(len(dataArray)):
+            dataset = dataArray[i]
+            # extract group number
+            groupNumber = dataset[7]
+            if groupNumber not in groups:
+                typeOfPartner = dataset[6]
+                groups.append(groupNumber)
+                volunteerCount += int(dataset[9])
+
+        dataEntry = [counter, key, typeOfPartner, volunteerCount]
+
+        ws.append(dataEntry)
+        counter += 1
+    SSAs = []
+    for key in SSADict:
+        dataArray = SSADict.get(key)
+        volunteerCount = 0
+        for i in range(len(dataArray)):
+            dataset = dataArray[i]
+            SSAName = dataset[2]
+            if SSAName not in SSAs:
+                SSAs.append(SSAName)
+                volunteerCount += int(dataset[9])
+        dataEntry = [counter, SSAName, 'SSA', volunteerCount]
+        ws.append(dataEntry)
+        counter += 1
+    formatWS(ws)
+    return wb
+
+def genPartnerDetailsSheet(wb, detailsDict):
+
+    return wb
+
 
 def parseExcel(filename):
     # I should be able to generate 4 additional sheets after being provided one sheet
@@ -215,6 +267,9 @@ def parseExcel(filename):
     dataArray = []
     volunteerDict = {}
     programDict = {}
+    partnerDict = {}
+    SSADict = {}
+    detailsDict = {}
     # preloaded
     for index, row in enumerate(ws.iter_rows(min_row=2)):
         dataArray = list(map(lambda x: x.value, row))
@@ -226,8 +281,18 @@ def parseExcel(filename):
         volunteerDict.setdefault(groupName, []).append(dataArray)
         programName = stripdown(dataArray[4])
         programDict.setdefault(programName, []).append(dataArray)
+        #use column G as unique identifier
+        partnerType = stripdown(dataArray[6])
+        if partnerType != 'individual':
+            partnerDict.setdefault(removeSuffixesFromGroup(dataArray[8]), []).append(dataArray)
+            detailsDict.setdefault(groupName, []).append(dataArray)
+        SSADict.setdefault(dataArray[2], []).append(dataArray)
+
+
 
     outbook = genVolunteerSheet(outbook, volunteerDict)
+    outbook = genPartnerSheet(outbook, partnerDict, SSADict)
+    outbook = genPartnerDetailsSheet(outbook, detailsDict)
     outbook = genProgramSheet(outbook, programDict)
     del outbook['Sheet']
 
